@@ -1,0 +1,343 @@
+USE [inSight]
+GO
+
+/****** Object:  StoredProcedure [dbo].[spREP_getFinishPickList_ordID_TKL]    Script Date: 06/25/2018 08:56:31 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE PROCEDURE [dbo].[spREP_getFinishPickList_ordID_TKL]
+	@ordID int
+AS
+
+SET NOCOUNT ON;
+
+SELECT
+	o.ordID, 
+	o.ordOrderNo, 
+	ol.olnLineNo,
+		CASE 
+			WHEN len(ol.olnOutlineNo)-len(replace(ol.olnOutlineNo,'.',''))= 2
+				THEN CAST(SUBSTRING(ol.olnOutlineNo, CHARINDEX('.',(ol.olnOutlineNo)) +1 , LEN(ol.olnOutlineNo) - CHARINDEX('.',ol.olnOutlineNo) - CHARINDEX('.',REVERSE(ol.olnOutlineNo))) AS INT)  
+			ELSE CAST(SUBSTRING(ol.olnOutlineNo, CHARINDEX('.',(ol.olnOutlineNo)) +1 , LEN(ol.olnOutlineNo))AS INT)
+        END
+	as Number, 
+	ol.olnShortDesc,
+	oi.oriReqQty AS Qty,
+	sa.saiDescription AS Product,
+	prodDesc.olnoValue AS CustomDescription,	
+	i.itmDescription,
+		CASE
+			WHEN rf.rotRouting IN (400,410,415,420,425,455,1421,1440,1450) 
+				THEN 'Accessories'
+			WHEN rf.rotRouting IN (30,430,435,440,445,450,1420,1430) 
+				THEN 'Accessories-Wood'	
+			WHEN rf.rotRouting IN (120,123,126,500,505,510,515,516,520,525) 
+				THEN 'Accessory Panels'				
+			WHEN rf.rotRouting IN (10,11,12,15,16,17,20,21,22,35,40,41,42,45,46,50,52,55,60,61,62,63,64,65,66,70,71,72,73,75,80,81,90,100,101,102,110,111,112,140,141,150,151,152,153,154,155,190,191,192,193,194,1000,1010,1011,1012,1015,1022,1050,1055,1100,1105,1150,1152,1155,1200,1210,1220,1230,1235,1240,1250,1260,1270,1280,1290,1300,1310,1431,1900,1905,1906,1910,1915,1916) 				
+				THEN 'Cabinet Parts'			
+			WHEN rf.rotRouting IN (202,242,280,281,282,285,290,291,292,293,294) 
+				THEN 'Door Parts'				
+			WHEN rf.rotRouting IN (200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,600,601,602,700,701,702,800) 				
+				THEN 'Doors'			
+			WHEN rf.rotRouting IN (160,161,162,163,170,171,172,173,180,181) 
+				THEN 'Drawer Parts'				
+			WHEN rf.rotRouting IN (91) 
+				THEN 'Frames'				
+			WHEN rf.rotRouting IN (300,305,310,315,320,325,330,335,340,345,350,355,360,365,370,375) 
+				THEN 'Fronts'
+			WHEN rf.rotRouting IN (4000,4010,4020,4030,4040,4050,4060,4070) 
+				THEN 'Purchased Parts'					
+			WHEN rf.rotRouting IN (1400,1405,1410) 
+				THEN 'Solid Wood Parts'					
+			WHEN rf.rotRouting IN (115,130,131,1925) 
+				THEN 'Special Parts'					
+			ELSE '***Contact IT ***'
+		END
+	AS Category,
+	optspc.optDescription AS Species,
+	optcasMat.optDescription AS CaseMaterial,
+	optaccMat.optDescription AS AccessoryMaterial,
+	optpro.optCode as [Edgeprofile Accessories],
+	optproacc.optCode as [Edgeprofile Door/Drawer],
+	optCJoint.optDescription as ConstructionJoint,
+	optldoorstyle.optDescription AS DoorStyle_Lower,
+	optcdoorstyle.optDescription AS DoorStyle_Center,
+	optudoorstyle.optDescription as DoorStyle_Upper,
+	optbdrawstyle.optDescription as DrawerStyle_Lower,
+	optTDrawstyle.optDescription as DrawerStyle_Top,
+
+	optproedg.optDescription AS ProfileEdge,	
+	optfin.optDescription as Finish,
+	fin.olnoValue as Finish2,
+	optFinInt.optDescription as FinInterior,
+	optrub.optDescription as RubThrough,
+	optacc.optDescription as Accent,	
+	optglz.optDescription as Glaze,
+	optglass.optDescription as Glass, 
+	f.itmfCode, 
+	rf.rotRouting, 
+	d.dimX, 
+	d.dimY,
+	d.dimZ
+
+ 
+FROM Orders o 
+		JOIN orderlines ol ON o.ordID = ol.ordid
+		JOIN OrderLineSAItems sai ON ol.olnID = sai.olnID
+		JOIN SAItems sa ON sai.saiID = sa.saiID
+		JOIN OrderItems oi ON ol.olnID = oi.olnID
+		JOIN items i ON oi.itmID = i.itmID 
+		JOIN ItemItemFamilies f ON i.itmID = f.itmID
+--TOP query Only (Manufacturing and Routing Information ----------------
+		JOIN OrderItemsMfg oim ON oi.itmID = oim.itmID  
+		JOIN TKL_View_Routings_Finish_TKL rf ON oim.rotID = rf.rotID
+		----------------------------------------------------------------
+--Part Dimensions
+		LEFT JOIN ItemDimensions d ON i.itmID = d.itmID
+						AND d.dimID = 1
+-- Species 						
+		LEFT JOIN OrderLineOptions spc ON ol.olnID = spc.olnID
+							AND spc.ftrID IN (1061,1299,1476)
+		LEFT JOIN Options optspc on spc.optID = optspc.optID
+--Case Material 		
+		LEFT JOIN OrderLineOptions casMat ON ol.olnID = casMat.olnID
+							AND casMat.ftrID IN (889,1310,1459)
+		LEFT JOIN Options optcasMat on casMat.optID = optcasMat.optID
+-- Accesory Material 1147,1351,1559
+		LEFT JOIN OrderLineOptions accMat ON ol.olnID = accMat.olnID
+							AND accMat.ftrID IN (1147,1351,1559)
+		LEFT JOIN Options optaccMat on accMat.optID = optaccMat.optID
+--Edgeprofile Door/Drawer
+		LEFT JOIN OrderLineOptions pro ON ol.olnID = pro.olnID
+							AND pro.ftrID IN (916,1304, 1466)
+		LEFT JOIN Options optpro on pro.optID = optpro.optID
+--Edgeprofile Accessories
+		LEFT JOIN OrderLineOptions proacc ON ol.olnID = proacc.olnID
+							AND proacc.ftrID IN (1158,1441)
+		LEFT JOIN Options optproacc on proacc.optID = optproacc.optID
+--Edge(s) to profile/edgeband
+		LEFT JOIN OrderLineOptions proedg ON ol.olnID = proedg.olnID
+							AND proedg.ftrID IN (931,1329,1605)
+		LEFT JOIN Options optproedg on proedg.optID = optproedg.optID
+--Finish
+ 		LEFT JOIN OrderLineOptions fin ON ol.olnID = fin.olnID
+							AND fin.ftrID IN (946,1301,1467) 
+		LEFT JOIN Options optfin on fin.optID = optfin.optID
+--Finish Interior
+ 		LEFT JOIN OrderLineOptions finInt ON ol.olnID = finInt.olnID
+							AND finInt.ftrID IN (958,1350,1395) 
+		LEFT JOIN Options optfinInt on finInt.optID = optfinInt.optID
+--Rub Through
+		LEFT JOIN OrderLineOptions rub ON ol.olnID = rub.olnID
+							AND rub.ftrID IN (1051,1472)   
+		LEFT JOIN Options optrub on rub.optID = optRub.optID
+--Accent
+		LEFT JOIN OrderLineOptions acc ON ol.olnID = acc.olnID
+							AND acc.ftrID IN (865,1366,1457)   
+		LEFT JOIN Options optacc on acc.optID = optacc.optID
+--Glaze
+		LEFT JOIN OrderLineOptions glz ON ol.olnID = glz.olnID
+							AND glz.ftrID IN (974,1367,1468)  
+		LEFT JOIN Options optglz on glz.optID = optglz.optID
+--Construction Joint
+		LEFT JOIN OrderLineOptions CJoint ON ol.olnID = CJoint.olnID
+							AND CJoint.ftrID IN (897,1344,1461) 
+		LEFT JOIN Options optCJoint on CJoint.optID = optCJoint.optID
+--Upper Door Style		
+		LEFT JOIN OrderLineOptions udoorstyle ON ol.olnID = udoorstyle.olnID
+							AND udoorstyle.ftrID IN (1099,1302,1481) 
+		LEFT JOIN Options optudoorstyle on udoorstyle.optID = optudoorstyle.optID	
+--Lower Door Style
+		LEFT JOIN OrderLineOptions ldoorstyle ON ol.olnID = ldoorstyle.olnID
+							AND ldoorstyle.ftrID IN (876,1303,1470)
+		LEFT JOIN Options optldoorstyle on ldoorstyle.optID = optldoorstyle.optID	
+--Center Door Style
+		LEFT JOIN OrderLineOptions cdoorstyle ON ol.olnID = cdoorstyle.olnID
+							AND cdoorstyle.ftrID IN (969,1222,1556)
+		LEFT JOIN Options optcdoorstyle on cdoorstyle.optID = optcdoorstyle.optID	
+--Bottom Drawer Style
+		LEFT JOIN OrderLineOptions BDrawstyle ON ol.olnID = BDrawstyle.olnID
+							AND BDrawstyle.ftrID IN (883,1307,1458)
+		LEFT JOIN Options optBDrawstyle on BDrawstyle.optID = optBDrawstyle.optID			
+--Top Drawer Style
+		LEFT JOIN OrderLineOptions TDrawstyle ON ol.olnID = TDrawstyle.olnID
+							AND TDrawstyle.ftrID IN (1088,1480,1306)
+		LEFT JOIN Options optTDrawstyle on TDrawstyle.optID = optTDrawstyle.optID			
+--Product Description - (used when catch all items are used in the system)
+		LEFT JOIN OrderLineOptions prodDesc ON ol.olnID = prodDesc.olnID
+							AND prodDesc.ftrID IN (1031,1359,1550)
+		LEFT JOIN Options optprodDesc on prodDesc.optID = optprodDesc.optID	
+--Glass Inserts		
+		LEFT JOIN OrderLineOptions glass ON ol.olnID = glass.olnID
+							AND glass.ftrID IN (883,885,924,925,970,981,987,996,1035,1037,1040,1073,1076,1094,1113,1114,1227,1334,1419,1423,1425,1427,1430,1431,1433,1458,1462,1464,1471,1555)
+							AND glass.optid IN (SELECT  Distinct optID
+												FROm Options o
+														Join Features f on o.ftrID = f.ftrID
+												WHERE optDescription like '%glass%'
+														or optDescription like '%Mirro%')
+		LEFT JOIN Options optglass on glass.optID = optglass.optID	
+----		
+
+WHERE 
+	--o.ordID = 44534 AND optfin.optDescription IS NOT NULL
+	o.ordID = @ordid AND optfin.optDescription IS NOT NULL
+
+
+UNION ALL
+
+SELECT 
+	o.ordID, 
+	o.ordOrderNo, 
+	ol.olnLineNo,
+		CASE 
+			WHEN len(ol.olnOutlineNo)-len(replace(ol.olnOutlineNo,'.',''))= 2
+				THEN CAST(SUBSTRING(ol.olnOutlineNo, CHARINDEX('.',(ol.olnOutlineNo)) +1 , LEN(ol.olnOutlineNo) - CHARINDEX('.',ol.olnOutlineNo) - CHARINDEX('.',REVERSE(ol.olnOutlineNo))) AS INT)  
+			ELSE CAST(SUBSTRING(ol.olnOutlineNo, CHARINDEX('.',(ol.olnOutlineNo)) +1 , LEN(ol.olnOutlineNo))AS INT)
+        END
+	as Number, 
+	ol.olnShortDesc, 
+	sai.olnsQuantity as qty,
+	sa.saiDescription AS Product,
+	prodDesc.olnoValue AS CustomDescription,
+	i.itmDescription,
+		CASE 
+			WHEN f.itmfCode = 'Post'
+				THEN 'Posts'
+			WHEN f.itmfCode = 'Moulding'
+				THEN 'Mouldings' 
+			WHEN f.itmfCode = 'Top Trim'
+				THEN 'Accessories' 
+				ELSE '***Contact IT ***'
+		End	
+	AS Category,	
+	optspc.optDescription AS Species,
+	optcasMat.optDescription AS CaseMaterial,
+	optaccMat.optDescription AS AccessoryMaterial,	
+	optpro.optCode as [Edgeprofile Accessories],
+	optproacc.optCode as [Edgeprofile Door/Drawer],
+	optCJoint.optDescription as ConstructionJoint,	
+	optldoorstyle.optDescription AS DoorStyle_Lower,
+	optcdoorstyle.optDescription AS DoorStyle_Center,
+	optudoorstyle.optDescription as DoorStyle_Upper,
+	optbdrawstyle.optDescription as DrawerStyle_Lower,
+	optTDrawstyle.optDescription as DrawerStyle_Top,		
+	optproedg.optDescription AS ProfileEdge,	
+	optfin.optDescription as Finish,
+	fin.olnoValue as Finish2,
+	optFinInt.optDescription as FinInterior,
+	optrub.optDescription as RubThrough,
+	optacc.optDescription as Accent,
+	optglz.optDescription as Glaze,		
+	'' as glass, 	
+	f.itmfCode, 
+	000 AS rotRouting, 
+	d.dimX, 
+	d.dimY,
+	d.dimZ
+
+	
+FROM Orders o
+		JOIN OrderLines ol ON o.ordID = ol.ordID
+		JOIN OrderLineSAItems sai ON ol.olnID = sai.olnID
+		JOIN SAItems sa ON sai.saiID = sa.saiID
+		JOIN Items i ON sai.saiID = i.itmid 
+		JOIN ItemItemFamilies f ON i.itmID = f.itmID   ---////
+--Part Dimensions
+		LEFT JOIN ItemDimensions d ON i.itmID = d.itmID
+						AND d.dimID = 1
+-- Species 						
+		LEFT JOIN OrderLineOptions spc ON ol.olnID = spc.olnID
+							AND spc.ftrID IN (1061,1299,1476)
+		LEFT JOIN Options optspc on spc.optID = optspc.optID						
+--Case Material 		
+		LEFT JOIN OrderLineOptions casMat ON ol.olnID = casMat.olnID
+							AND casMat.ftrID IN (889,1310,1459)
+		LEFT JOIN Options optcasMat on casMat.optID = optcasMat.optID
+-- Accesory Material 
+		LEFT JOIN OrderLineOptions accMat ON ol.olnID = accMat.olnID
+							AND accMat.ftrID IN (1147,1351,1559)
+		LEFT JOIN Options optaccMat on accMat.optID = optaccMat.optID
+--Edgeprofile Door/Drawer
+		LEFT JOIN OrderLineOptions pro ON ol.olnID = pro.olnID
+							AND pro.ftrID IN (916,1304, 1466)
+		LEFT JOIN Options optpro on pro.optID = optpro.optID
+--Edgeprofile Accessories
+		LEFT JOIN OrderLineOptions proacc ON ol.olnID = proacc.olnID
+							AND proacc.ftrID IN (1158,1441)
+		LEFT JOIN Options optproacc on proacc.optID = optproacc.optID
+--Edge(s) to profile/edgeband
+		LEFT JOIN OrderLineOptions proedg ON ol.olnID = proedg.olnID
+							AND proedg.ftrID IN (931,1329,1605)
+		LEFT JOIN Options optproedg on proedg.optID = optproedg.optID
+--Finish
+		LEFT JOIN OrderLineOptions fin ON ol.olnID = fin.olnID
+							AND fin.ftrID IN (946,1301,1467)   
+		LEFT JOIN Options optfin on fin.optID = optfin.optID						
+--Finish Interior
+ 		LEFT JOIN OrderLineOptions finInt ON ol.olnID = finInt.olnID
+							AND finInt.ftrID IN (958,1350,1395) 
+		LEFT JOIN Options optfinInt on finInt.optID = optfinint.optID
+--Rub Through
+		LEFT JOIN OrderLineOptions rub ON ol.olnID = rub.olnID
+							AND rub.ftrID IN (1051,1472)   
+		LEFT JOIN Options optrub on rub.optID = optRub.optID
+--Accent
+		LEFT JOIN OrderLineOptions acc ON ol.olnID = acc.olnID
+							AND acc.ftrID IN (865,1366,1457)   
+		LEFT JOIN Options optacc on acc.optID = optacc.optID
+--Glaze
+		LEFT JOIN OrderLineOptions glz ON ol.olnID = glz.olnID
+							AND glz.ftrID IN (974,1367,1468)  
+		LEFT JOIN Options optglz on glz.optID = optglz.optID
+--Construction Joint
+		LEFT JOIN OrderLineOptions CJoint ON ol.olnID = CJoint.olnID
+							AND CJoint.ftrID IN (897,1344,1461) 
+		LEFT JOIN Options optCJoint on CJoint.optID = optCJoint.optID
+--Upper Door Style
+		LEFT JOIN OrderLineOptions udoorstyle ON ol.olnID = udoorstyle.olnID
+							AND udoorstyle.ftrID IN (1099,1302,1481)
+		LEFT JOIN Options optudoorstyle on udoorstyle.optID = optudoorstyle.optID	
+--LOWER Door Style
+		LEFT JOIN OrderLineOptions ldoorstyle ON ol.olnID = ldoorstyle.olnID
+							AND ldoorstyle.ftrID IN (876,1303,1470)
+		LEFT JOIN Options optldoorstyle on ldoorstyle.optID = optldoorstyle.optID	
+--CENTER Door Style
+		LEFT JOIN OrderLineOptions cdoorstyle ON ol.olnID = cdoorstyle.olnID
+							AND cdoorstyle.ftrID IN (969,1222,1556)
+		LEFT JOIN Options optcdoorstyle on cdoorstyle.optID = optcdoorstyle.optID	
+--BOTTOM Drawer Style
+		LEFT JOIN OrderLineOptions BDrawstyle ON ol.olnID = BDrawstyle.olnID
+							AND BDrawstyle.ftrID IN (883,1307,1458)
+		LEFT JOIN Options optBDrawstyle on BDrawstyle.optID = optBDrawstyle.optID			
+--TOP Drawer Style
+		LEFT JOIN OrderLineOptions TDrawstyle ON ol.olnID = TDrawstyle.olnID
+							AND TDrawstyle.ftrID IN (1088,1480,1306)
+		LEFT JOIN Options optTDrawstyle on TDrawstyle.optID = optTDrawstyle.optID			
+--Product Description - (used when catch all items are used in the system)
+		LEFT JOIN OrderLineOptions prodDesc ON ol.olnID = prodDesc.olnID
+							AND prodDesc.ftrID IN (1031,1359,1550)
+		LEFT JOIN Options optprodDesc on prodDesc.optID = optprodDesc.optID								
+--Glass Inserts		
+		LEFT JOIN OrderLineOptions glass ON ol.olnID = glass.olnID
+							AND glass.ftrID IN (883,885,924,925,970,981,987,996,1035,1037,1040,1073,1076,1094,1113,1114,1227,1334,1419,1423,1425,1427,1430,1431,1433,1458,1462,1464,1471,1555)
+							AND glass.optid IN (SELECT  Distinct optID
+												FROm Options o
+														Join Features f on o.ftrID = f.ftrID
+												WHERE optDescription like '%glass%'
+														or optDescription like '%Mirro%')
+		LEFT JOIN Options optglass on glass.optID = optglass.optID			
+		
+
+
+WHERE 
+	--o.ordID = 44534 AND optfin.optDescription IS NOT NULL
+	o.ordID = @ordid AND optfin.optDescription IS NOT NULL
+GO
+
+
